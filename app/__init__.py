@@ -5,7 +5,6 @@ from flask_migrate import Migrate
 from app.models import db
 from app.routers import questions_bp
 
-
 CONFIG_MAP = {
     'development': 'config.DevelopmentConfig',
     'testing': 'config.TestingConfig',
@@ -25,6 +24,5 @@ def create_app(config_object=None):
     db.init_app(app)
     migrate.init_app(app, db)
     app.register_blueprint(questions_bp)
-
 
     return app

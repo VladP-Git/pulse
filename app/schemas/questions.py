@@ -1,10 +1,8 @@
 from typing import Annotated
-from pydantic import BaseModel, Field, ConfigDict, TypeAdapter
+from pydantic import BaseModel, Field, ConfigDict, StringConstraints, TypeAdapter
 
-QuestionText = Annotated[
-    str, Field(min_length=1, max_length=256, strip_whitespace=True, description="Text of the question")
-]
-QuestionId = Annotated[int, Field(description="ID of the question")]
+
+QuestionText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=100)]
 
 
 class QuestionBase(BaseModel):
@@ -15,12 +13,14 @@ class QuestionCreate(QuestionBase):
     pass
 
 
+class QuestionUpdate(QuestionBase):
+    text: QuestionText | None = None
+
+
 class QuestionRead(QuestionBase):
     model_config = ConfigDict(from_attributes=True)
-    id: QuestionId
 
+    id: int
 
-class QuestionUpdate(QuestionBase):
-    pass
 
 QuestionsList = TypeAdapter(list[QuestionRead])

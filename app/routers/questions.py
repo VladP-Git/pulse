@@ -1,72 +1,127 @@
 from flask import Blueprint, jsonify, request
-from sqlalchemy import select
-from app.models import Question, db
-from app.schemas.questions import QuestionRead, QuestionCreate, QuestionsList, QuestionUpdate
 from pydantic import ValidationError
 
-questions_bp = Blueprint('questions', __name__, url_prefix='/questions')
+from app.models import db, Question
+from app.schemas.questions import (
+    QuestionCreate,
+    QuestionRead,
+    QuestionUpdate,
+    QuestionsList,
+)
 
 
-# @questions_bp.route('', methods=['GET'])
-# def get_questions():
-#     """Получение списка всех вопросов."""
-#     questions = db.session.scalars(select(Question))
-#     result = [QuestionRead.model_validate(q).model_dump() for q in questions]
-#     return jsonify(result), 200
+questions_bp = Blueprint(
+    "questions",
+    __name__,
+    url_prefix="/questions",
+)
 
-@questions_bp.route('', methods=['GET'])
+
+def _get_question_or_404(question_id: int):
+    question = db.session.get(Question, question_id)
+
+    if question is None:
+        return None, (
+            jsonify({
+                "error": f"Question with id={question_id} not found"
+            }),
+            404,
+        )
+
+    return question, None
+
+
+@questions_bp.route("", methods=["GET"])
 def get_questions():
     """Получение списка всех вопросов."""
-    questions = db.session.scalars(select(Question))
-    result = QuestionsList.dump_python(QuestionsList.validate_python(questions))
+    questions = db.session.scalars(
+        db.select(Question)
+    ).all()
+    result = QuestionsList.dump_python(questions)
     return jsonify(result), 200
 
-@questions_bp.route('', methods=['POST'])
+
+@questions_bp.route("", methods=["POST"])
 def create_question():
-    """Создание вопроса."""
+    """Создание нового вопроса."""
+    payload = request.get_json(silent=True)
+
+    if payload is None:
+        return jsonify({
+            "error": "Invalid or missing JSON body"
+        }), 400
+
     try:
-        data = request.get_json()
-        question = QuestionCreate.model_validate(data)
+        question_in = QuestionCreate.model_validate(payload)
+    except ValidationError as exc:
+        return jsonify({
+            "error": "Validation error",
+            "details": exc.errors(),
+        }), 422
 
-    except ValidationError as e:
-        return jsonify({"errors": e.errors()}), 422
-
-    question = Question(text=question.text)
+    question = Question(text=question_in.text)
     db.session.add(question)
     db.session.commit()
 
-    return jsonify(QuestionRead.model_validate(question).model_dump()), 201
+    return jsonify(
+        QuestionRead.model_validate(question).model_dump()
+    ), 201
 
 
+@questions_bp.route("/<int:question_id>", methods=["GET"])
+def get_question(question_id: int):
+    """Получение конкретного вопроса по ID."""
+    question, error = _get_question_or_404(question_id)
+
+    if error:
+        return error
+
+    return jsonify(
+        QuestionRead.model_validate(question).model_dump()
+    ), 200
 
 
+@questions_bp.route("/<int:question_id>", methods=["PUT"])
+def update_question(question_id: int):
+    """Обновление конкретного вопроса по ID."""
+    question, error = _get_question_or_404(question_id)
 
-@questions_bp.route('/<int:id>', methods=['DELETE'])
-def delete_question(id):
-    question = db.session.get(Question, id)
-    if not question:
-        return jsonify({"error": "Question not found"}), 404
+    if error:
+        return error
+
+    payload = request.get_json(silent=True)
+
+    if payload is None:
+        return jsonify({
+            "error": "Invalid or missing JSON body"
+        }), 400
+
+    try:
+        question_in = QuestionUpdate.model_validate(payload)
+    except ValidationError as exc:
+        return jsonify({
+            "error": "Validation error",
+            "details": exc.errors(),
+        }), 422
+
+    question.text = question_in.text
+
+    db.session.commit()
+
+    return jsonify(
+        QuestionRead.model_validate(question).model_dump()
+    ), 200
+
+
+@questions_bp.route("/<int:question_id>", methods=["DELETE"])
+def delete_question(question_id: int):
+    """Удаление конкретного вопроса по ID."""
+    question, error = _get_question_or_404(question_id)
+
+    if error:
+        return error
+
     db.session.delete(question)
     db.session.commit()
+
     return "", 204
-
-@questions_bp.route('/<int:id>', methods=['PUT', 'PATCH'])
-def update_question(id):
-    question = db.session.get(Question, id)
-    if not question:
-        return jsonify({"error": "Question not found"}), 404
-    payload = request.get_json(silent=True) or {}
-    try:
-        q = QuestionUpdate.model_validate(payload)
-    except ValidationError as e:
-        return jsonify({"errors": e.errors()}), 422
-    question.text = q.text
-    db.session.commit()
-    return jsonify(QuestionRead.model_validate(question).model_dump()), 200
-
-@questions_bp.route('/<int:id>', methods=['GET'])
-def get_question(id):
-    question = db.session.get(Question, id)
-    if not question:
-        return jsonify({"error": "Question not found"}), 404
-    return jsonify(QuestionRead.model_validate(question).model_dump()), 200
