@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from pydantic import BaseModel, ConfigDict, StringConstraints, TypeAdapter
+from pydantic import BaseModel, ConfigDict, StringConstraints, TypeAdapter, computed_field
 
 # Валидация текстов
 QuestionText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=100)]
@@ -40,3 +40,22 @@ QuestionResponse = QuestionRead
 # --- 3. Адаптеры списков ---
 QuestionsList = TypeAdapter(list[QuestionResponse])
 CategoriesList = TypeAdapter(list[CategoryRead])
+
+
+class QuestionResult(BaseModel):
+    question_id: int
+    agree_count: int
+    disagree_count: int
+
+    @computed_field
+    @property
+    def total(self) -> int:
+        return self.agree_count + self.disagree_count
+
+
+    @computed_field
+    @property
+    def is_agree_percentage(self) -> float:
+        if not self.total:
+            return 0.0
+        return round(self.agree_count / self.total * 100, 2)
